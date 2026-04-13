@@ -140,6 +140,8 @@ end
 
 lines = [lines; render_selected_output_block( ...
     sec.SELECTED_OUTPUT, baseEnv, selectedOutputIncludesGas); ""]; %#ok<AGROW>
+lines(end + 1, 1) = "RUN_CELLS";
+lines(end + 1, 1) = "    -cells 1-" + string(n);
 lines(end + 1, 1) = "END";
 lines(end + 1, 1) = "";
 
@@ -379,15 +381,21 @@ end
 function rows = select_selected_output_rows_by_solution(data, headings, nCells)
 solnCol = find_selected_output_heading(headings, ["soln"; "solution"], "soln");
 solnId = round(data(:, solnCol));
-rows = zeros(nCells, 1);
-for c = 1:nCells
-    idx = find(solnId == c, 1, 'last');
-    if isempty(idx)
-        error('runPhreeqcStepV2:MissingSelectedOutputRow', ...
-            'Selected output is missing rows for solution %d.', c);
+
+target = (1:nCells).';
+lastStart = [];
+for startIdx = 1:(numel(solnId) - nCells + 1)
+    if isequal(solnId(startIdx:startIdx + nCells - 1), target)
+        lastStart = startIdx;
     end
-    rows(c) = idx;
 end
+
+if isempty(lastStart)
+    error('runPhreeqcStepV2:MissingSelectedOutputBlock', ...
+        'Selected output does not contain a complete solution block 1:%d.', nCells);
+end
+
+rows = (lastStart:lastStart + nCells - 1).';
 end
 
 function values = extract_selected_output_scalar(data, headings, candidates, label)
