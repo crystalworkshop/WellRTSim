@@ -1,0 +1,3 @@
+WellName,"ID",TopMeasDepth,BottomMeasDepth,CasingType,CasingSize,CasingDescription,InnerDiameter,OuterDiameter,Roughness
+KJ9,1,0,251,Casing,R  0.159 m,Constant diameter casing, 0.316,0.325,4.6e-05
+KJ9,1,251,1101,Casting,R 0.088,Constant diameter casting,0.176,0.17875,4.6e-05

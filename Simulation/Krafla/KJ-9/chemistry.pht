@@ -1,0 +1,98 @@
+DATABASE <DATABASE_PATH>
+
+MS_SECTION STATIC
+KNOBS
+    -diagonal_scale true
+    -tolerance 1e-15
+    -convergence_tolerance 1e-9
+    -iterations 1500
+    -pe_step_size 2
+
+INCREMENTAL_REACTIONS true
+
+PHASES
+# # from LLNL database    
+Calcite
+        CaCO3 +1.0000 H+  =  + 1.0000 Ca++ + 1.0000 HCO3-
+        log_k           1.8487
+	-delta_H	-25.7149	kJ/mol	# Calculated enthalpy of reaction	Calcite
+#	Enthalpy of formation:	-288.552 kcal/mol
+#   -analytic -1.4978e+002 -4.8370e-002 4.8974e+003 6.0458e+001 7.6464e+001
+#       -Range:  0-300
+    -analytic 2.153723e+03 7.023428e-01 -8.290205e+04 -8.481322e+02 3.433311e+06 -2.606353e-04
+# correcton to Lu, P., Zhang, G., Apps, J., Zhu, C., 2022. Comparison of thermodynamic data files for PHREEQC. Earth-Science Reviews 225, 103888. https://doi.org/10.1016/j.earscirev.2021.103888
+
+
+CO2(g)
+	CO2 = CO2
+	-log_k	-1.468
+	-delta_h -4.776 kcal
+	-analytic   10.3509  -3.0039e-2  -4000.0  0.6796  5.8e5  2.6450e-5
+	-T_c  304.2 # critical T, K
+	-P_c   72.86 # critical P, atm
+	-Omega 0.225 # acentric factor
+    
+MS_END
+
+MS_SECTION RATES
+RATES
+<KIN_NAME>
+-start
+10  sat = SI("<KIN_NAME>")
+30  tau = PARM(1)
+40  water_mass = PARM(2)
+50  drive = 1 - 10^sat
+60  rate = drive / tau
+70  if (M <= 1e-6 and rate > 0) then rate = 0
+80  moles = rate * TIME*water_mass
+85  if (moles > 0) then moles = 0 
+90  SAVE moles
+-end
+MS_END
+
+MS_SECTION SOLUTION_TEMPLATE
+SOLUTION <CELL>
+    temp      <TEMP_C>   
+    pressure  <PRESSURE_BAR>  
+    pH        <PH> charge
+    units     mol/kgw
+    density   <DENSITY>    
+    <AQ_NAME> <AQ_C> <SUFFIX>
+    -water    <WATER_MASS>
+MS_END
+
+MS_SECTION GAS_PHASE_TEMPLATE
+GAS_PHASE <CELL>
+    -fixed_volume true
+    -equilibrium with solution <CELL>
+    -volume <VOLUME_L>
+    <GAS_NAME>
+    H2O(g)
+MS_END
+
+MS_SECTION KINETICS_TEMPLATE
+KINETICS <CELL>
+    <KIN_NAME>
+        -m0    <KIN_M0>
+        -m     <KIN_M>
+        -parms <KIN_tau> <WATER_MASS>
+    -cvode true
+    -bad_step_max 1000
+    -steps <DT_S> in 1 steps
+MS_END
+
+MS_SECTION SELECTED_OUTPUT
+SELECTED_OUTPUT 1
+    -reset false
+    -high_precision true
+    -simulation true
+    -state true
+    -solution true
+    -reaction true
+    -pH true
+    -water true
+    -totals <AQ_NAMES>
+    -si <KIN_NAMES>
+    -kin <KIN_NAMES>
+    -gas <GAS_NAMES> H2O(g)
+MS_END
