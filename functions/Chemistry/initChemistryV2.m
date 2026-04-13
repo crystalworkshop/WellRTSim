@@ -60,7 +60,6 @@ elseif numel(kinFormula) > nMin
     kinFormula = kinFormula(1:nMin);
 end
 kinMM = zeros(nMin, 1);
-kinCaStoich = zeros(nMin, 1);
 for i = 1:nMin
     f = strtrim(kinFormula(i));
     if strlength(f) == 0
@@ -68,7 +67,6 @@ for i = 1:nMin
     end
     kinFormula(i) = f;
     kinMM(i) = phreeqcGfwKgV2(f, cfg.database_path);
-    kinCaStoich(i) = get_formula_element_coefficient(f, "Ca");
 end
 
 species = repmat(struct( ...
@@ -148,22 +146,6 @@ state.chem.initialMolal = aqMolal(:);
 state.chem.inletMolal = aqMolal(:);
 state.chem.initialMassfrac = aqMassfrac(:);
 state.chem.componentMolarMass = molarMass(:);
-state.chem.caComponentIndex = find(strcmpi(cellstr(aqNames), 'Ca'), 1);
-state.chem.lastCalciumBalance = struct( ...
-    'componentIndex', state.chem.caComponentIndex, ...
-    'inKg', 0, ...
-    'outKg', 0, ...
-    'precipKg', 0, ...
-    'precipHydroKg', 0, ...
-    'fluidDeltaKg', 0, ...
-    'residualKg', 0, ...
-    'chemInKg', 0, ...
-    'chemOutKg', 0, ...
-    'chemResidualKg', 0, ...
-    'sourceInKg', 0, ...
-    'sourceOutKg', 0, ...
-    'boundaryInKg', 0, ...
-    'boundaryOutKg', 0);
 
 state.chem.gasNames = gasNames;
 state.chem.gasComponentIndex = gasCompIdx(:);
@@ -174,7 +156,6 @@ state.chem.mineralFormula = kinFormula;
 state.chem.mineralTauS = kinTau(:);
 state.chem.mineralDensity = kinDensity(:);
 state.chem.mineralMolarMass = kinMM(:);
-state.chem.mineralCalciumStoich = kinCaStoich(:);
 state.chem.kinMoles = zeros(nMin, nCells);
 state.chem.scaleMineralNames = kinNames;
 state.chem.scaleMolarMass = kinMM(:);
@@ -338,119 +319,4 @@ if strlength(clean) == 0
     clean = string(name);
 end
 formula = clean;
-end
-
-function coeff = get_formula_element_coefficient(formula, elementSymbol)
-coeff = 0;
-stoich = parse_stoichiometry(formula);
-if isempty(stoich.elements)
-    return
-end
-idx = find(strcmpi(cellstr(stoich.elements), char(string(elementSymbol))), 1);
-if ~isempty(idx)
-    coeff = stoich.coefficients(idx);
-end
-end
-
-function stoich = parse_stoichiometry(formula)
-token = strtrim(string(formula));
-token = replace(token, char(183), '.');
-if strlength(token) == 0
-    stoich = struct('elements', strings(0, 1), 'coefficients', zeros(0, 1));
-    return
-end
-
-parts = split(token, '.');
-total = containers.Map('KeyType', 'char', 'ValueType', 'double');
-for i = 1:numel(parts)
-    part = strtrim(parts(i));
-    if strlength(part) == 0
-        continue
-    end
-    segment = char(part);
-    [prefactor, idx] = parse_leading_number(segment, 1);
-    if prefactor == 0
-        prefactor = 1;
-    end
-    [counts, ~] = accumulate_formula_segment(segment, idx);
-    total = merge_formula_counts(total, counts, prefactor);
-end
-
-keys = string(total.keys);
-coeffs = zeros(numel(keys), 1);
-for k = 1:numel(keys)
-    coeffs(k) = total(char(keys(k)));
-end
-stoich = struct('elements', keys(:), 'coefficients', coeffs(:));
-end
-
-function [counts, idx] = accumulate_formula_segment(segment, idx)
-counts = containers.Map('KeyType', 'char', 'ValueType', 'double');
-len = numel(segment);
-while idx <= len
-    ch = segment(idx);
-    if ch == '('
-        [subCounts, idx] = accumulate_formula_segment(segment, idx + 1);
-        [multiplier, idx] = parse_leading_number(segment, idx);
-        if multiplier == 0
-            multiplier = 1;
-        end
-        counts = merge_formula_counts(counts, subCounts, multiplier);
-    elseif ch == ')'
-        idx = idx + 1;
-        return
-    elseif isstrprop(ch, 'upper')
-        [elem, idx] = parse_formula_element(segment, idx);
-        [multiplier, idx] = parse_leading_number(segment, idx);
-        if multiplier == 0
-            multiplier = 1;
-        end
-        if isKey(counts, elem)
-            counts(elem) = counts(elem) + multiplier;
-        else
-            counts(elem) = multiplier;
-        end
-    else
-        idx = idx + 1;
-    end
-end
-end
-
-function [elem, idx] = parse_formula_element(segment, idx)
-len = numel(segment);
-startIdx = idx;
-idx = idx + 1;
-while idx <= len && isstrprop(segment(idx), 'lower')
-    idx = idx + 1;
-end
-elem = segment(startIdx:idx - 1);
-end
-
-function [value, idx] = parse_leading_number(segment, idx)
-len = numel(segment);
-startIdx = idx;
-while idx <= len && (isstrprop(segment(idx), 'digit') || segment(idx) == '.')
-    idx = idx + 1;
-end
-if idx == startIdx
-    value = 0;
-else
-    value = str2double(segment(startIdx:idx - 1));
-    if ~isfinite(value)
-        value = 0;
-    end
-end
-end
-
-function total = merge_formula_counts(total, counts, multiplier)
-keys = counts.keys;
-for i = 1:numel(keys)
-    key = keys{i};
-    value = counts(key) * multiplier;
-    if isKey(total, key)
-        total(key) = total(key) + value;
-    else
-        total(key) = value;
-    end
-end
 end

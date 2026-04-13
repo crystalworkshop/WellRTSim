@@ -7,9 +7,6 @@ if ~state.chem.initialized
 end
 
 geom = chemistryPhaseGeometryV2(state);
-NliqBefore = state.chem.N_liq;
-NgasBefore = state.chem.N_gas;
-kinMolesBefore = state.chem.kinMoles;
 liqResidence = geom.mLiquid ./ max(abs(state.Q_l(1:geom.n)), eps);
 reactionDt = min(state.dt * ones(1, geom.n), liqResidence);
 reactionScale = state.dt ./ max(reactionDt, eps);
@@ -46,8 +43,6 @@ state.chem.lastPhreeqcScript = out.script;
 state = updateChemistryDerivedV2( ...
     state, geom, Nliq, Ngas, ...
     out.pH, out.si, out.kinMoles, out.partitionCoefficients);
-state.chem.lastCalciumBalance = computeCalciumMassBalanceV2( ...
-    state, geom, NliqBefore, NgasBefore, kinMolesBefore, NliqAdv, NgasAdv);
 end
 
 function tf = should_use_semi_implicit_coupling(state)

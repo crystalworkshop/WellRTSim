@@ -35,11 +35,6 @@ state = initResultsH5(state);
 
 if state.calc_chem==1
     state = chemistryInitializeStateV2(state);
-    state.CaInKg(1) = 0;
-    state.CaOutKg(1) = 0;
-    state.CaPrecipKg(1) = 0;
-    state.CaFluidDeltaKg(1) = 0;
-    state.CaBalanceResidualKg(1) = 0;
 end
 state.CoutPpm(:, 1) = liquidMassfracToPpmV2(state.C(:, end));
 updateWellheadPlots(state);
@@ -128,16 +123,6 @@ while state.tt <= state.tfin && state.runFlag
         state = chemistryStepV2(state);
         state.ChemIterations(idx) = 1;
         state.ChemTol1(idx) = 0;
-        caBal = state.chem.lastCalciumBalance;
-        state.CaInKg(idx) = caBal.inKg;
-        state.CaOutKg(idx) = caBal.outKg;
-        state.CaPrecipKg(idx) = caBal.precipHydroKg;
-        state.CaFluidDeltaKg(idx) = caBal.fluidDeltaKg;
-        state.CaBalanceResidualKg(idx) = caBal.residualKg;
-        fprintf('  Ca hydro balance [kg/dt]: in=%10.4e, precip=%10.4e, out=%10.4e, dfluid=%10.4e, resid=%10.4e\n', ...
-            caBal.inKg, caBal.precipHydroKg, caBal.outKg, caBal.fluidDeltaKg, caBal.residualKg);
-        fprintf('  Ca chem  balance [kg/flight]: pre=%10.4e, precip=%10.4e, post=%10.4e, resid=%10.4e\n', ...
-            caBal.chemInKg, caBal.precipKg, caBal.chemOutKg, caBal.chemResidualKg);
         state = appendChemistryH5(state);
     end
     state.CoutPpm(:, idx) = liquidMassfracToPpmV2(state.C(:, end));
