@@ -140,8 +140,6 @@ end
 
 lines = [lines; render_selected_output_block( ...
     sec.SELECTED_OUTPUT, baseEnv, selectedOutputIncludesGas); ""]; %#ok<AGROW>
-lines(end + 1, 1) = "RUN_CELLS";
-lines(end + 1, 1) = "    -cells 1-" + string(n);
 lines(end + 1, 1) = "END";
 lines(end + 1, 1) = "";
 

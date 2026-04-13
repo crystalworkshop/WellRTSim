@@ -81,8 +81,6 @@ lines(end + 1, 1) = "    -start";
 lines(end + 1, 1) = "10 PUNCH " + strjoin(cellstr(expr), ', ');
 lines(end + 1, 1) = "    -end";
 lines(end + 1, 1) = "";
-lines(end + 1, 1) = "RUN_CELLS";
-lines(end + 1, 1) = "    -cells 1";
 lines(end + 1, 1) = "END";
 lines(end + 1, 1) = "";
 
