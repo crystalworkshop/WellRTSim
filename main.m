@@ -13,7 +13,6 @@ addpath('functions/Wellspec');
 addpath('functions/Graphics');
 addpath('functions/IO');
 addpath('functions/init');
-addpath('PhreeqcMatlab/src');
 
 state = struct(); % Start with empty state
 % SimDir='Simulation/Sumatra/AA03_1380m/';

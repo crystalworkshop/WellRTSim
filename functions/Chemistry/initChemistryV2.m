@@ -5,6 +5,7 @@ state.chem = struct();
 
 setupPath = getChemistrySetupPath(state);
 cfg = parseChemistrySetup(setupPath);
+cfg.database_path = resolvePhreeqcDatabasePathV2(cfg.database_path);
 
 aqNames = string(cfg.aqueous_names(:));
 aqSuffix = string(cfg.aqueous_suffix(:));

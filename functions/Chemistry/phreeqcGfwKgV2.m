@@ -9,7 +9,7 @@ end
 
 mwKg = NaN(size(formulas));
 
-dbPath = string(dbPath);
+dbPath = resolvePhreeqcDatabasePathV2(dbPath);
 good = strlength(strtrim(formulas)) > 0;
 if ~all(good)
     error('phreeqcGfwKgV2:BlankFormula', 'Blank formula passed to PHREEQC GFW().');

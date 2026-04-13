@@ -26,7 +26,6 @@ chemistry.pht
 generate phreeqc: true
 
 ## Database file path
-/usr/local/share/doc/iphreeqc/database/phreeqc.dat
-# /usr/local/share/doc/iphreeqc/database/llnl.dat
-# d:\Dropbox\currentprojects\PhreeqcMatlab\database\phreeqc.dat
-
+phreeqc.dat
+# llnl.dat
+# /absolute/path/to/PhreeqcMatlab/database/phreeqc.dat

@@ -1,13 +1,15 @@
 function iph = createIPhreeqcHandleV2(dbPath)
 % createIPhreeqcHandleV2 Create a configured IPhreeqc handle.
 
-dbPath = char(string(dbPath));
+requirePhreeqcMatlabV2();
+dbPath = char(resolvePhreeqcDatabasePathV2(dbPath));
 
 try
     iph = IPhreeqc();
+    iph = iph.CreateIPhreeqc();
 catch ME
     error('createIPhreeqcHandleV2:IPhreeqcMissing', ...
-        'Unable to create IPhreeqc instance: %s', ME.message);
+        'Unable to create IPhreeqc instance after loading PhreeqcMatlab: %s', ME.message);
 end
 
 status = iph.LoadDatabase(dbPath);

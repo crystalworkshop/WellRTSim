@@ -9,6 +9,7 @@ dbPath = string(state.chem.db);
 if strlength(dbPath) == 0
     dbPath = string(state.db);
 end
+dbPath = resolvePhreeqcDatabasePathV2(dbPath);
 
 iph = createIPhreeqcHandleV2(dbPath);
 
