@@ -16,7 +16,6 @@ Simulation inputs live under `Simulation/`, results are written to the selected 
 ## Notes
 
 - The default configured case in `main.m` is `Simulation/Krafla/KJ-9/`.
-- WellRTSim no longer vendors `PhreeqcMatlab`; the dependency must already be installed and started externally.
 - The default chemistry setup uses `phreeqc.dat`, which WellRTSim resolves from the active MATLAB path after `PhreeqcMatlab/startup.m` has been run.
 - `user_manual.pdf` contains additional project documentation.
 
