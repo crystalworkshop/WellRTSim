@@ -41,6 +41,7 @@ function state = initResultsH5(state)
     h5create(outFile, '/wellhead/rho_gas',        [Inf], 'ChunkSize', [chunkT], 'Datatype','double');
     h5create(outFile, '/wellhead/rho_liq',        [Inf], 'ChunkSize', [chunkT], 'Datatype','double');
     h5create(outFile, '/wellhead/quality_mass',   [Inf], 'ChunkSize', [chunkT], 'Datatype','double');
+    h5create(outFile, '/wellhead/steam_frac',     [Inf], 'ChunkSize', [chunkT], 'Datatype','double');
     h5create(outFile, '/wellhead/u_mix',          [Inf], 'ChunkSize', [chunkT], 'Datatype','double');
     h5create(outFile, '/wellhead/u_gas',          [Inf], 'ChunkSize', [chunkT], 'Datatype','double');
     h5create(outFile, '/wellhead/u_liq',          [Inf], 'ChunkSize', [chunkT], 'Datatype','double');
@@ -57,6 +58,7 @@ function state = initResultsH5(state)
         h5writeatt(outFile, '/wellhead/rho_gas',        'units', 'kg/m^3');
         h5writeatt(outFile, '/wellhead/rho_liq',        'units', 'kg/m^3');
         h5writeatt(outFile, '/wellhead/quality_mass',   'units', '-');
+        h5writeatt(outFile, '/wellhead/steam_frac',     'units', '-');
         h5writeatt(outFile, '/wellhead/u_mix',          'units', 'm/s');
         h5writeatt(outFile, '/wellhead/u_gas',          'units', 'm/s');
         h5writeatt(outFile, '/wellhead/u_liq',          'units', 'm/s');
@@ -127,6 +129,7 @@ function state = initResultsH5(state)
             "  /wellhead/rho_gas        : gas density [kg/m^3]" newline ...
             "  /wellhead/rho_liq        : liquid density [kg/m^3]" newline ...
             "  /wellhead/quality_mass   : mass quality [-]" newline ...
+            "  /wellhead/steam_frac     : outlet steam mass fraction [-]" newline ...
             "  /wellhead/u_mix          : mixture velocity [m/s]" newline ...
             "  /wellhead/u_gas          : gas velocity [m/s]" newline ...
             "  /wellhead/u_liq          : liquid velocity [m/s]" newline ...

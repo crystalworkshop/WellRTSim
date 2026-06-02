@@ -3,6 +3,8 @@ function state = initializeSteadyState(state)
 % IC_switch:
 %   1 - top-down integration
 %   2 - bottom-up shooting integration
+%   3 - prescribed profiles: P from InitPressure.csv, T from
+%       InitTemperature.csv (-> H via IAPWS), velocity from Q_init
 
 model = buildSteadyModel(state);
 
@@ -11,9 +13,11 @@ switch state.IC_switch
         [P, H, Mdot, ~] = solveTopDown(state, model);
     case 2
         [P, H, Mdot, pBotUsed] = solveBottomUp(state, model);
+    case 3
+        [P, H, Mdot, ~] = solvePrescribed(state, model);
     otherwise
         error('initializeSteadyState:InvalidICSwitch', ...
-            'IC_switch must be 1 (top-down) or 2 (bottom-up).');
+            'IC_switch must be 1 (top-down), 2 (bottom-up), or 3 (prescribed profiles).');
 end
 
 n = state.n;
@@ -42,10 +46,17 @@ state.Q_v = zeros(1, n);
 state.Q_l = zeros(1, n);
 state.mdot_ic = Mdot;
 
+% Convert the 3-field steady profile [P;H;u_mix] to the drift-flux layout
+% [P;H;FVl;uv] used by the transient solver (slip residual zero by construction).
+Y = convertToDriftFluxState(state, Y);
+state.k = 4;
+state.Y = Y;
+state.Y0 = Y;
+
 % Populate phase-flow caches for the converged initial state so the
 % initial profile plots show liquid/gas/mixture rates immediately.
 state = refreshHydroFluxCache(state, Y);
-state = updateWellheadDiagnostics(state, 1, state.Y(3, end), state.Y(3, end), false);
+state = updateWellheadDiagnostics(state, false);
 
 Ttop = state.T(end) - 273.15;
 pScale = state.pressureUnitScale;
@@ -259,6 +270,45 @@ if model.useRockAtZeroFlow
         end
     end
 end
+end
+
+function [P, H, Mdot, pBotUsed] = solvePrescribed(state, ~)
+% Prescribed-profile initial condition (IC_switch = 3).
+% Pressure is taken from InitPressure.csv and temperature from
+% InitTemperature.csv (both loaded into state.initProfiles in the x-position
+% coordinate, 0 = bottom, Lp = top). Enthalpy follows from IAPWS h(P,T) and
+% the velocity field is set so each cell carries the target mass flux Q_init.
+pp = state.initProfiles.pressure;
+tp = state.initProfiles.temperature;
+if isempty(pp.position) || isempty(tp.position)
+    error('initializeSteadyState:MissingInitProfiles', ...
+        ['IC_switch = 3 requires InitPressure.csv and InitTemperature.csv ' ...
+         'in %s.'], state.SimDir);
+end
+
+x = state.x(:).';
+P = interpProfile(pp.position, pp.value, x);   % Pa
+T = interpProfile(tp.position, tp.value, x);   % degC
+P = max(P, 1e3);
+
+H = zeros(1, state.n);
+for i = 1:state.n
+    H(i) = 1e3 * IAPWS_IF97('h_pT', P(i)/1e6, T(i) + 273.15);
+end
+
+Mdot = max(state.Q_init, 0) * ones(1, state.n);
+pBotUsed = P(1);
+end
+
+function v = interpProfile(pos, val, xq)
+% Linear interpolation of a profile onto the grid xq, sorted and de-duplicated,
+% with nearest-value hold outside the sampled range.
+pos = pos(:); val = val(:);
+[pos, idx] = sort(pos); val = val(idx);
+[pos, iu] = unique(pos, 'stable'); val = val(iu);
+v = interp1(pos, val, xq(:).', 'linear', 'extrap');
+v(xq < pos(1))   = val(1);
+v(xq > pos(end)) = val(end);
 end
 
 function opts = solverOptions(state)

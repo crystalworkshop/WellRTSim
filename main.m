@@ -15,17 +15,24 @@ addpath('functions/IO');
 addpath('functions/init');
 
 state = struct(); % Start with empty state
-% SimDir='Simulation/Sumatra/AA03_1380m/';
 SimDir='Simulation/Krafla/KJ-9/';
+% SimDir='Simulation/Tonkin/LO_T_heat/';
 SimFile='params.md';
 %SimDir='Simulation/WellSim/RK-5_id1/';
 %SimDir='Simulation/Dixie_Valley/well_84-7/';
 state.SimDir = SimDir;
 state.SimFile = SimFile;
+
+% Set false to disable all live plotting/drawnow (diagnose graphics-render crashes)
+state.enablePlots = true;
+
 state = initializeState(state);
 state = initializeGraphics(state);
 
 state = initializeSteadyState(state); 
+if state.iBC_top == 3
+    state = updateTopPressureFromWHP(state);
+end
 % Initialize chemistry initial conditions using current (P,T) profile
 
 % Print simulation parameters
@@ -35,12 +42,13 @@ state = initResultsH5(state);
 
 if state.calc_chem==1
     state = chemistryInitializeStateV2(state);
+    state.wellhead.CoutPpm = liquidMassfracToPpmV2(state.C(:, end));
 end
-state.CoutPpm(:, 1) = liquidMassfracToPpmV2(state.C(:, end));
-updateWellheadPlots(state);
-
-refreshTransientPlots(state, state.Y, 'Initial conditions');
-drawnow;
+if state.enablePlots
+    updateWellheadPlots(state);
+    refreshTransientPlots(state, state.Y, 'Initial conditions');
+    drawnow;
+end
 [k,n] = size(state.Y);
 % For storing results at different time steps
 num_saves = 10;  % Number of time steps to save
@@ -62,20 +70,24 @@ state.stepIndex = 2;
 
 %% Time loop
 % Switch to Transient tab and plot initial state once (keep previous)
-refreshTransientPlots(state, state.Y, ['Time = ' num2str(state.tt/3600/24) ' days']);
-state.tabgp.SelectedTab = state.TranTab;
+if state.enablePlots
+    refreshTransientPlots(state, state.Y, ['Time = ' num2str(state.tt/3600/24) ' days']);
+    state.tabgp.SelectedTab = state.TranTab;
+end
 state = appendProfileH5(state, true);
 istep = 0; % time step counter
 
 while state.tt <= state.tfin && state.runFlag
     % Allow UI callbacks to execute during the loop
-    drawnow limitrate;
+    if state.enablePlots, drawnow limitrate; end
     % Check for pause
     if state.pauseFlag
         state.statusLabel.Text = 'Simulation paused - showing Y0 values';
         % Plot Y0 values in transient tab when paused (overlay)
-        refreshTransientPlots(state, state.Y0, ['Paused @ ' num2str(state.tt/3600/24) ' days']);
-        state.tabgp.SelectedTab = state.TranTab;
+        if state.enablePlots
+            refreshTransientPlots(state, state.Y0, ['Paused @ ' num2str(state.tt/3600/24) ' days']);
+            state.tabgp.SelectedTab = state.TranTab;
+        end
 
         % Enable run button while paused
         state.runBtn.Enable = 'on';
@@ -100,34 +112,45 @@ while state.tt <= state.tfin && state.runFlag
     if state.cancelFlag, break; end
 
     % Take one time step
+    state = updateTopPressureFromWHP(state);
     state.Dpprev=state.Dp;
     [Y, tol1, tol2,it, state] = OneStep(state);
     istep = istep + 1;
-    state = updateTopPressureFromWHP(state);
-    idx = state.stepIndex;
-    state.Iterations(idx) = it;
-    state.Tol1(idx) = tol1;
+
+    if state.cancelFlag
+        break;
+    end
+    if ~state.stepConverged
+        fprintf('Simulation did not converge at time t = %7.3f with dt = %7.3e\n', state.tt, state.dt);
+        state.cancelFlag = true;
+        break;
+    end
+
+    state.wellhead.iterations = it;
+    state.wellhead.tol1 = tol1;
     
     % state.P_top=max(2e6,state.P_top-1e5*state.tt);
 
     % Update status display
     progress = min(1, state.tt/state.tfin);
     state.statusLabel.Text = sprintf('Running: Time %.3f s (%.1f%% complete)', state.tt, progress*100);
-    drawnow limitrate; % process UI events and keep app responsive
+    if state.enablePlots, drawnow limitrate; end % process UI events and keep app responsive
 
     if state.cancelFlag, break; end
-    state = updateWellheadDiagnostics(state, idx, state.Y(3, end - 1), state.Y(3, end));
+    state = updateWellheadDiagnostics(state);
     %% chemistry model
     chemTimeS = state.tt + state.dt;
     if state.calc_chem == 1 && chemTimeS >= state.stat_chem
         state = chemistryStepV2(state);
-        state.ChemIterations(idx) = 1;
-        state.ChemTol1(idx) = 0;
+        state.chemSample.iterations = 1;
+        state.chemSample.tol1 = 0;
         state = appendChemistryH5(state);
     end
-    state.CoutPpm(:, idx) = liquidMassfracToPpmV2(state.C(:, end));
+    if state.calc_chem == 1
+        state.wellhead.CoutPpm = liquidMassfracToPpmV2(state.C(:, end));
+    end
     state = appendWellheadH5(state); % Save wellhead time-series after outlet chemistry is updated
-    updateWellheadPlots(state);
+    if state.enablePlots, updateWellheadPlots(state); end
 
     state.stepIndex = state.stepIndex + 1;
     state.Y0 = Y;
@@ -135,7 +158,7 @@ while state.tt <= state.tfin && state.runFlag
     state.tt = state.tt + state.dt;
 
     % Plot every 'pltf' steps and keep previous lines
-    if mod(istep, max(1, round(state.pltf))) == 0
+    if state.enablePlots && mod(istep, max(1, round(state.pltf))) == 0
         refreshTransientPlots(state, state.Y, ['t = ' num2str(state.tt/3600/24) ' days']);
         updateWellheadPlots(state);
         state.tabgp.SelectedTab = state.TranTab;
@@ -159,23 +182,31 @@ while state.tt <= state.tfin && state.runFlag
     end
 
     % Check for convergence
-    if isnan(tol1)
-        fprintf('Simulation did not converged at time t = %7.3f\n', state.tt);
+    if ~isfinite(tol1)
+        fprintf('Simulation did not converge at time t = %7.3f\n', state.tt);
         state.cancelFlag = true;
         break;
     end
+
+    % Adopt the controller's next-step dt (OneStep left state.dt at the dt that
+    % was actually integrated, so the time advance above used the solved step).
+    state.dt = state.dtNext;
 end
 
 % Final results and cleanup
 if state.cancelFlag
     state.statusLabel.Text = 'Simulation stopped';
-    refreshTransientPlots(state, state.Y0, ['Final t = ' num2str(state.tt/3600/24) ' days']);
-    state.tabgp.SelectedTab = state.TranTab;
+    if state.enablePlots
+        refreshTransientPlots(state, state.Y0, ['Final t = ' num2str(state.tt/3600/24) ' days']);
+        state.tabgp.SelectedTab = state.TranTab;
+    end
 else
     state.statusLabel.Text = 'Simulation complete!';
     fprintf('\nSimulation completed. Plotting results...\n');
-    refreshTransientPlots(state, state.Y, ['Final t = ' num2str(state.tt/3600/24) ' days']);
-    state.tabgp.SelectedTab = state.TranTab;
+    if state.enablePlots
+        refreshTransientPlots(state, state.Y, ['Final t = ' num2str(state.tt/3600/24) ' days']);
+        state.tabgp.SelectedTab = state.TranTab;
+    end
 end
 
 % Reset control buttons

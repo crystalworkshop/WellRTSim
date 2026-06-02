@@ -2,4 +2,5 @@
 /PhreeqcMatlab/
 /Simulation/**/*.mat
 /Simulation/**/*.h5
+/Simulation/**/*,h5
 /Simulation/**/*.phr

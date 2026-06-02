@@ -1,47 +1,41 @@
-function state = updateWellheadDiagnostics(state, idx, phaseVelocity, mixVelocity, updateFlowRate)
-% Update cached wellhead time-series diagnostics for the current state.
+function state = updateWellheadDiagnostics(state, updateFlowRate)
+% Compute the latest wellhead sample from the drift-flux primaries at the
+% wellhead face (state.Y(:,end) = [P; H; FVl; uv]) and store it in
+% state.wellhead. The full time series lives only in the HDF5 file.
 
-if nargin < 4 || isempty(mixVelocity)
-    mixVelocity = phaseVelocity;
-end
-if nargin < 5
+if nargin < 2 || isempty(updateFlowRate)
     updateFlowRate = true;
 end
 
-state.tsav(idx) = state.tt / 86400;
-state.WHP(idx) = state.Y(1, end);
-
+% [alpha_g, alpha_l, rho_g, rho_l, h_g, h_l, mu_l, T] at the top cell centre
 [alpha_g, alpha_l, rho_g, rho_l, ~, ~, ~, Ttop] = ...
     calculatePhaseProperties(state.Y(1, end), state.Y(2, end), state);
-thetaTop = state.gravityThetaNode(end);
-[ug, ul] = calculatePhaseVelocities(phaseVelocity, alpha_g, rho_g, rho_l, ...
-    state.Dp(end), Ttop, thetaTop, state);
+
+FVl = state.Y(3, end);   % liquid volume flux at wellhead face
+uv  = state.Y(4, end);   % vapour velocity at wellhead face
+ul  = FVl / max(alpha_l, 1e-9);
+ug  = uv;
 
 areaTop = pi * state.Dp(end)^2 / 4;
-if updateFlowRate
-    state.FlowRate(idx) = ((1 - alpha_g) * rho_l * ul + alpha_g * rho_g * ug) * areaTop;
-end
-
-den = alpha_g * rho_g + alpha_l * rho_l;
-if den == 0
-    den = eps;
-end
-
-state.RhoTop(idx) = alpha_g * rho_g + alpha_l * rho_l;
-state.RhoGasTop(idx) = rho_g;
-state.RhoLiqTop(idx) = rho_l;
-state.TTop(idx) = Ttop;
-state.Quality(idx) = (alpha_g * rho_g) / den;
+rho_mix = alpha_g*rho_g + alpha_l*rho_l;
+den = max(rho_mix, eps);
 
 mdot_g = alpha_g * rho_g * ug * areaTop;
-mdot_l = alpha_l * rho_l * ul * areaTop;
-denf = abs(mdot_g) + abs(mdot_l);
-if denf == 0
-    denf = eps;
-end
+mdot_l = rho_l * FVl * areaTop;          % alpha_l*rho_l*ul = rho_l*FVl
+denf = max(abs(mdot_g) + abs(mdot_l), eps);
 
-state.SteamFrac(idx) = abs(mdot_g) / denf;
-state.UGasTop(idx) = ug;
-state.ULiqTop(idx) = ul;
-state.UMixTop(idx) = mixVelocity;
+state.wellhead.time_days = state.tt / 86400;
+state.wellhead.WHP       = state.Y(1, end);
+if updateFlowRate
+    state.wellhead.flow_rate = mdot_g + mdot_l;
+end
+state.wellhead.rho_mix    = rho_mix;
+state.wellhead.rho_gas    = rho_g;
+state.wellhead.rho_liq    = rho_l;
+state.wellhead.T          = Ttop;
+state.wellhead.quality    = (alpha_g * rho_g) / den;
+state.wellhead.steam_frac = abs(mdot_g) / denf;
+state.wellhead.u_gas      = ug;
+state.wellhead.u_liq      = ul;
+state.wellhead.u_mix      = (rho_l*FVl + alpha_g*rho_g*uv) / den;
 end

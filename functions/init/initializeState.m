@@ -10,8 +10,8 @@ function state = initializeState(state)
 % Pull geometry information and interpolants
 state = read_geom(state);
 
-% Default number of equations
-state.k = 3;
+% Default number of equations (drift-flux: P, H, FVl, uv)
+state.k = 4;
 
 % Read parameters from file
 if ~isfield(state, 'SimFile') || isempty(state.SimFile)
@@ -50,6 +50,13 @@ state = ensureField(state, 'Q_init', 0);
 state = ensureField(state, 'Qtop', state.Q_init);
 state.Qtop = state.Q_init;
 state = ensureField(state, 'iBC_top', 1);
+% Wellhead flow control: when the top mass flow goes negative (backflow into
+% the well), relieve the wellhead pressure toward atmospheric to keep
+% production positive. One-way (WHP only drops), floored at P_atm.
+state = ensureField(state, 'whp_flow_control', 0);   % 1 = enable
+state = ensureField(state, 'whp_ctrl_relax', 0.1);   % fraction of (WHP-P_atm) shed per step on backflow
+state = ensureField(state, 'P_atm', 1.01325e5);      % atmospheric floor [Pa]
+state.WHP_ctrl = Inf;                                % controlled WHP ceiling (latches on first backflow)
 state = ensureField(state, 'calc_chem', 0);
 state = ensureField(state, 'eps_scale', 0);
 state = ensureField(state, 'IC_switch', 1);
@@ -176,7 +183,11 @@ state.HPT = [];
 
 fprintf('State initialization completed.\n');
 
-state = initChemistryV2(state);
+if state.calc_chem == 1
+    state = initChemistryV2(state);
+else
+    state = initEmptyChemistry(state);
+end
 
 % Load wellhead schedule once during initialization
 state.whpSchedule = loadWHPHistory(state);
@@ -212,28 +223,15 @@ for k = 1:numel(fields)
     end
 end
 
-% Preallocate time-series storage
+% Profile snapshots are still indexed by a small count.
 state.nt_profile = max(1, floor(state.tfin / max(1e-12, state.profile_save_interval)) + 1);
-state.nt_well = max(1, ceil(state.tfin / max(1e-12, state.dt)) + 1);
 state.nt = state.nt_profile;
 
-state.FlowRate = zeros(1, state.nt_well);
-state.tsav = zeros(1, state.nt_well);
-state.WHP = zeros(1, state.nt_well);
-state.RhoTop = zeros(1, state.nt_well);
-state.Quality = zeros(1, state.nt_well);
-state.SteamFrac = zeros(1, state.nt_well);
-state.UGasTop = zeros(1, state.nt_well);
-state.ULiqTop = zeros(1, state.nt_well);
-state.UMixTop = zeros(1, state.nt_well);
-state.RhoGasTop = zeros(1, state.nt_well);
-state.RhoLiqTop = zeros(1, state.nt_well);
-state.TTop = zeros(1, state.nt_well);
-state.Iterations = zeros(1, state.nt_well);
-state.Tol1 = nan(1, state.nt_well);
-state.ChemIterations = zeros(1, state.nt_well);
-state.ChemTol1 = nan(1, state.nt_well);
-state.CoutPpm = nan(state.mChem, state.nt_well);
+% Wellhead/chemistry time series are NOT held in memory: each timestep's
+% sample is written straight to HDF5 (appendWellheadH5 / appendChemistryH5)
+% and read back from there for plotting. We keep only the latest sample.
+state.wellhead = struct('CoutPpm', []);
+state.chemSample = struct('iterations', 1, 'tol1', 0);
 state.stepIndex = 1;
 state.tt = 0;
 state.cancelFlag = false;
@@ -339,6 +337,26 @@ function state = ensureField(state, fieldName, defaultValue)
 if ~isfield(state, fieldName) || isempty(state.(fieldName))
     state.(fieldName) = defaultValue;
 end
+end
+
+function state = initEmptyChemistry(state)
+% Minimal chemistry placeholder when calc_chem == 0. Keeps the fields that
+% graphics and IO routines read so they no-op gracefully without PHREEQC.
+state.mChem = 0;
+state.chemNames = strings(0, 1);
+state.C = [];
+state.chem = struct( ...
+    'mineralNames', strings(0, 1), ...
+    'mineralThickness', [], ...
+    'saturationIndices', [], ...
+    'totalScaleThickness', [], ...
+    'elementSymbols', strings(0, 1), ...
+    'elementSpeciesIndex', [], ...
+    'plotLabels', strings(0, 1), ...
+    'gasMask', false(0, 1), ...
+    'partitionCoefficients', [], ...
+    'species', struct('name', {}, 'type', {}), ...
+    'lastPhreeqcScript', '');
 end
 
 function state = normalizeInitialFlowRate(state)

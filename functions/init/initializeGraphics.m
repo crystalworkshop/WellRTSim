@@ -7,6 +7,23 @@ function state = initializeGraphics(state)
 % Output:
 %   state - State structure with graphics components initialized
 
+% Headless mode: build no UI at all. Install plain-struct stubs for the
+% handles the main loop sets unconditionally (statusLabel + control buttons)
+% and the control flags, so the simulation runs with zero graphics. Use this
+% to diagnose render crashes that originate in the graphics layer, not the math.
+if isfield(state, 'enablePlots') && ~state.enablePlots
+    btnStub = struct('Enable', 'off');
+    state.statusLabel = struct('Text', '');
+    state.runBtn = btnStub;
+    state.pauseBtn = btnStub;
+    state.cancelBtn = btnStub;
+    state.runFlag = true;
+    state.pauseFlag = false;
+    state.cancelFlag = false;
+    fprintf('Graphics disabled (headless mode) - no UI created.\n');
+    return;
+end
+
 % Suppress common UI component warnings
 warning('off', 'MATLAB:HandleGraphics:ObsoletedProperty:JavaFrame');
 warning('off', 'MATLAB:ui:javacomponent:FunctionToBeRemoved');

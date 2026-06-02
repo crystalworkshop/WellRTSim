@@ -1,0 +1,32 @@
+{
+    "Fv_l": [
+        2.0,
+        2.0
+    ],
+    "P": [
+        21000000.0,
+        500000.0
+    ],
+    "S_v": [
+        0.0,
+        0.0
+    ],
+    "T": [
+        200.0,
+        100.0
+    ],
+    "depth_el": [
+        -2133.0,
+        0.0
+    ],
+    "depth_intr": [
+        -2133.0,
+        0.0
+    ],
+    "source": "/media/rton671/Data/Geothermal/Wellbore Modelling/geothermal-wellbore-simulator/pureWaterTestProblems/Problem3_198.5CProduction/initialConditions",
+    "time": 0.0,
+    "u_v": [
+        0.0,
+        0.0
+    ]
+}

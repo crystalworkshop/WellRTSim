@@ -4,17 +4,18 @@ function plotResultsOnAxes(axesStruct, state, Y, titleText)
 
 x = state.x;
 
-% Extract solution variables
+% Extract solution variables (drift-flux primaries: P, H, FVl, uv at faces)
 pressure = Y(1, :);
 enthalpy = Y(2, :);
-velocity = Y(3, :);
 
 % Derived quantities
 n = length(x);
 [alpha_g, alpha_l, rho_g, rho_l, ~, ~, ~, temperature] = ...
     calculatePhaseProperties(pressure, enthalpy, state);
-thetaNodes = state.gravityThetaNode(:).';
-[u_g, u_l] = calculatePhaseVelocities(velocity, alpha_g, rho_g, rho_l, state.Dp(:).', temperature, thetaNodes, state);
+u_g = Y(4, :);                              % vapour velocity
+u_l = Y(3, :) ./ max(alpha_l, 1e-9);        % liquid velocity = FVl/Sl
+velocity = deriveMixtureVelocity(Y, state); % mixture velocity
+u_g(alpha_g < 1e-6) = velocity(alpha_g < 1e-6); % no gas: show mixture velocity, not the slip-closure phantom
 
 % Mineral palette shared between panels
 mineralNames = string(state.chem.mineralNames(:));
@@ -158,6 +159,7 @@ end
 if ~isempty(titleText), axesStruct.ax3.Title.String = ['Velocities  ' titleText]; end
 
 % Mineral saturation indices (bottom-left)
+if state.calc_chem == 1
 try
     axSI = axesStruct.ax4;
     cla(axSI);
@@ -192,8 +194,13 @@ try
 catch ME
     warning('Saturation index plot failed: %s', ME.message);
 end
+else
+    cla(axesStruct.ax4);
+    axesStruct.ax4.Visible = 'off';
+end
 
 % Element mass concentration plot (bottom-middle)
+if state.calc_chem == 1
 axElem = axesStruct.ax5;
 cla(axElem);
 axElem.YScale = 'log';
@@ -227,10 +234,16 @@ if nElems > 0
 else
     legend(axElem, 'off');
 end
-ylim(axElem, [1e-2 max(1e-1, max(chemPpm(:)))]);
+cMax = max(chemPpm(:));
+if isempty(cMax), cMax = 1e-1; end
+ylim(axElem, [1e-2 max(1e-1, cMax)]);
 ylabel(axElem, 'c [ppm]');
 if ~isempty(titleText)
     axElem.Title.String = ['Mass Concentration  ' titleText];
+end
+else
+    cla(axesStruct.ax5);
+    axesStruct.ax5.Visible = 'off';
 end
 
 % Flow rates (bottom-right of left block)
@@ -269,6 +282,7 @@ try
 end
 
 %% Geometry column at right: plot diameters and color scale deposits by composition
+if state.calc_chem == 1
 try
     axGeom = axesStruct.axGeom;
     xx = state.x(:);
@@ -535,6 +549,10 @@ end
 try
     ylim(axesStruct.axGeom, [0, state.x(end)]);
 catch
+end
+else
+    cla(axesStruct.axGeom);
+    axesStruct.axGeom.Visible = 'off';
 end
 end
 

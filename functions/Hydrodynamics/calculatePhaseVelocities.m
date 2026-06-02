@@ -1,7 +1,7 @@
 function [u_g, u_l] = calculatePhaseVelocities(u_mix, alpha_g, rho_v, rho_l, d, T, theta0, state)
 u_g = u_mix;
 u_l = u_mix;
-
+% return; % Disable for now until we can validate against experimental data
 active = state.tt >= state.t_adjust + state.t_transit & alpha_g > 1e-5;
 if ~any(active(:))
     return;
@@ -9,9 +9,13 @@ end
 
 eps_h = 1e-6;
 Sv = min(1 - eps_h, max(eps_h, alpha_g));
+% IAPWS-2014 surface tension of ordinary water: sigma = B*tau^mu*(1 - b*tau),
+% B = 0.2358 N/m, mu = 1.256, b = 0.625, tau = 1 - T/Tc, Tc = 647.096 K.
 sigma = zeros(size(T));
-subcritical = T < 647.1;
-sigma(subcritical) = 0.2358 * (1 - T(subcritical) / 647.1).^1.256;
+Tc = 647.096;
+subcritical = T < Tc;
+tau = 1 - T(subcritical) / Tc;
+sigma(subcritical) = 0.2358 * tau.^1.256 .* (1 - 0.625 * tau);
 sigma = max(sigma, 1e-8);
 
 alpha1 = 0.06;

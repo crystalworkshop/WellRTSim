@@ -35,8 +35,12 @@ function [alpha_g, alpha_l, rho_g, rho_l, h_g, h_l, mu_l, T] = ...
         x_v = IAPWS_IF97('x_ph', P, H);
         mu_l = IAPWS_IF97('mu_ph', P, H);
 
-        xTransition = 1e-5;
-        smoothWidth = max(xTransition / 5, eps);
+        % Void-onset smoothing. The width must be resolvable by the Newton
+        % finite-difference Jacobian (dh~1e3 J/kg -> dx_v~5e-4 in quality);
+        % a too-narrow switch makes dalpha_g/dH garbage at boiling onset and
+        % stalls convergence. Span the first ~0.2-0.5% quality instead.
+        xTransition = 2e-3;
+        smoothWidth = 1e-3;
         phaseWeight = 0.5 * (tanh((x_v - xTransition) ./ smoothWidth) + 1);
         phaseWeight = min(max(phaseWeight, 0), 1);
 
@@ -75,8 +79,12 @@ function [alpha_g, alpha_l, rho_g, rho_l, h_g, h_l, mu_l, T] = ...
         denom = h_g - h_l;
         x_v = (hVec - h_l) ./ denom;
 
-        xTransition = 1e-5;
-        smoothWidth = max(xTransition / 5, eps);
+        % Void-onset smoothing. The width must be resolvable by the Newton
+        % finite-difference Jacobian (dh~1e3 J/kg -> dx_v~5e-4 in quality);
+        % a too-narrow switch makes dalpha_g/dH garbage at boiling onset and
+        % stalls convergence. Span the first ~0.2-0.5% quality instead.
+        xTransition = 2e-3;
+        smoothWidth = 1e-3;
         phaseWeight = 0.5 * (tanh((x_v - xTransition) ./ smoothWidth) + 1);
         phaseWeight = min(max(phaseWeight, 0), 1);
 
@@ -104,6 +112,13 @@ function [alpha_g, alpha_l, rho_g, rho_l, h_g, h_l, mu_l, T] = ...
 
         alpha_l(maskLiq) = 1;
     end
+
+    % Physical bound: void fraction in [0, 1-eps]. Capping below 1 keeps a
+    % sliver of liquid so Sl = 1-Sv never hits zero exactly (which would make
+    % ul = FVl/Sl and the liquid momentum flux singular at fully-flashed cells)
+    % and keeps the slip closure's (1 - Sv) denominator positive.
+    alpha_g = min(max(alpha_g, 0), 1 - 1e-8);
+    alpha_l = 1 - alpha_g;
 
     alpha_g = reshape(alpha_g, origSize);
     alpha_l = reshape(alpha_l, origSize);

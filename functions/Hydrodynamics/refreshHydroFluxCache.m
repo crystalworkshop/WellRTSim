@@ -1,5 +1,7 @@
 function state = refreshHydroFluxCache(state, Y)
-% refreshHydroFluxCache Re-evaluate RHS_v2 on the converged state to cache phase fluxes.
+% refreshHydroFluxCache Re-evaluate RHS_v2 on the converged state to cache the
+% per-face phase mass fluxes (Q_l_face/Q_v_face) and the per-phase upwind
+% weights (w_l_face/w_v_face) consumed by the chemistry transport.
 
 n = state.n;
 state.Q_v_face(:) = 0;

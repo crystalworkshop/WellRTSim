@@ -24,15 +24,14 @@ function state = appendProfileH5(state, forceSave)
     % Record time in the profiles timeline
     try, h5write(file, '/profiles/time_days', t_days, j, 1); catch, end
 
-    % Extract current fields
+    % Extract current fields (drift-flux primaries: P, H, FVl, uv at faces)
     P = state.Y(1, :);
     H = state.Y(2, :);
-    U = state.Y(3, :);
+    Ycurr = state.Y;
 
     pScale = state.pressureUnitScale;
     pLabel = char(state.pressureUnitLabel);
     P_out = P / pScale;
-    Ycurr = [P; H; U];
 
     % Cache time in days for file naming consistency with legacy folders
     tDaysStr = sprintf('%.6f', t_days);
@@ -45,8 +44,10 @@ function state = appendProfileH5(state, forceSave)
     quality_mass = zeros(size(alpha_g));
     validQuality = denQuality > 0;
     quality_mass(validQuality) = numQuality(validQuality) ./ denQuality(validQuality);
-    thetaNodes = state.gravityThetaNode(:).';
-    [u_g, u_l] = calculatePhaseVelocities(U, alpha_g, rho_g, rho_l, state.Dp(:).', T, thetaNodes, state);
+    u_g = state.Y(4, :);                              % vapour velocity (face i+1/2)
+    u_l = state.Y(3, :) ./ max(alpha_l, 1e-9);        % liquid velocity = FVl/Sl
+    U   = deriveMixtureVelocity(state.Y, state);      % mixture velocity (face i+1/2)
+    u_g(alpha_g < 1e-6) = U(alpha_g < 1e-6);          % no gas: report mixture velocity, not the slip-closure phantom
     state = refreshHydroFluxCache(state, Ycurr);
     qGas = state.Q_v(1:n);
     qLiq = state.Q_l(1:n);
@@ -62,7 +63,9 @@ function state = appendProfileH5(state, forceSave)
     currThickness = [];
     elementProfiles = [];
     elementSymbols = strings(0);
+    gasNames = strings(0);
 
+    if state.calc_chem == 1
     mineralNames = string(state.chem.mineralNames(:));
     nMinerals = numel(mineralNames);
     currThickness = zeros(nMinerals, n);
@@ -117,6 +120,7 @@ function state = appendProfileH5(state, forceSave)
         elementProfiles = state.C(elemIdx, 1:n);
     else
         elementProfiles = zeros(0, n);
+    end
     end
 
     % Create an HDF5 subgroup under /profiles with this time as the name
@@ -190,6 +194,7 @@ function state = appendProfileH5(state, forceSave)
     end
 
     % Gas partition coefficients (K = c_g/c_l)
+    if state.calc_chem == 1
     K = state.chem.partitionCoefficients;
     entries = state.chem.species;
     types = arrayfun(@(e) string(e.type), entries);
@@ -219,6 +224,7 @@ function state = appendProfileH5(state, forceSave)
             h5writeatt(file, kPath, 'description', 'gas partition coefficient c_g/c_l');
         catch
         end
+    end
     end
 
     % Geometry
@@ -260,7 +266,9 @@ function state = appendProfileH5(state, forceSave)
                 elemVar = matlab.lang.makeValidName(['element_' elemName]);
                 Ttbl.(elemVar) = elementProfiles(idx, 1:n).';
             end
-            K = state.chem.partitionCoefficients;
+            if state.calc_chem == 1
+                K = state.chem.partitionCoefficients;
+            end
             for idx = 1:numel(gasNames)
                 gasName = char(gasNames(idx));
                 kVar = matlab.lang.makeValidName(['K_' gasName]);

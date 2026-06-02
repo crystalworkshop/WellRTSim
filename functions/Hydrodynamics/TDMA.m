@@ -29,9 +29,8 @@ end
 function [Minv, ok] = safeSolveMatrix(A, idx)
 ok = true;
 if rcond(A) < 1e-14 || any(~isfinite(A), 'all')
-    fprintf('Singular block matrix at index %d:\n', idx);
-    disp(num2str(A, '%.16g\t'));
-    warning('TDMA:SingularBlock', 'Matrix block is singular or ill-conditioned.');
+    % Ill-conditioned block: signal failure quietly; OneStep retries with a
+    % smaller dt (rejected iterates can produce singular blocks).
     Minv = zeros(size(A));
     ok = false;
     return;

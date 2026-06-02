@@ -5,15 +5,10 @@ function state = appendChemistryH5(state)
         return;
     end
     file = state.h5_file;
-    % Determine last filled index
-    iFilled = state.stepIndex;
     j = state.h5_chem_idx + 1;
-    if j > iFilled
-        return; % nothing new to write
-    end
 
-    h5write(file, '/chemistry/time_days',  state.tsav(j),         j, 1);
-    h5write(file, '/chemistry/iterations', state.ChemIterations(j), j, 1);
-    h5write(file, '/chemistry/tol1',       state.ChemTol1(j),      j, 1);
+    h5write(file, '/chemistry/time_days',  state.wellhead.time_days,    j, 1);
+    h5write(file, '/chemistry/iterations', state.chemSample.iterations, j, 1);
+    h5write(file, '/chemistry/tol1',       state.chemSample.tol1,       j, 1);
     state.h5_chem_idx = j;
 end

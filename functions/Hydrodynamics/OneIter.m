@@ -24,9 +24,29 @@ for i = 1:n
 
     if any(~isfinite(S(:,i))) || any(~isfinite(A(:,:,i)),'all') || ...
        any(~isfinite(B(:,:,i)),'all') || any(~isfinite(C(:,:,i)),'all')
-        disp([S(:,i), Y(:,i), Y0(:,i)]);
-        error('NaN/Inf in residual or Jacobian at i=%d', i);
+        % Non-finite Newton iterate: signal failure so OneStep rejects the
+        % step and retries with a smaller dt (no hard error / no spam).
+        Y = Y0; tol1 = Inf; tol2 = Inf;
+        return;
     end
+end
+
+% Equilibrate the Newton system before the solve. The four residuals and
+% four primaries span ~6 orders of magnitude (energy ~1e5, mass/slip ~1;
+% P,H ~1e6, FVl,uv ~1), so the raw block matrix has cond ~1e12 purely from
+% units and rcond sits on the TDMA singular cutoff. Row+column scaling
+% (D_r * M * D_c) recovers ~6 orders of conditioning; we solve for the
+% scaled correction and unscale: dY = D_c * y.
+cS = [1e6; 1e6; 1; 1];        % column scales: P[Pa] H[J/kg] FVl[m/s] uv[m/s]
+S_unscaled = S;
+for i = 1:n
+    rowmax = max([abs(A(:,:,i)), abs(C(:,:,i)), abs(B(:,:,i))], [], 2);
+    rowmax(rowmax == 0) = 1;
+    rS = 1 ./ rowmax;
+    A(:,:,i) = (rS .* A(:,:,i)) .* cS';
+    C(:,:,i) = (rS .* C(:,:,i)) .* cS';
+    B(:,:,i) = (rS .* B(:,:,i)) .* cS';
+    S(:,i)   = rS .* S(:,i);
 end
 
 [dY, id] = TDMA(A, C, B, S, n);
@@ -35,21 +55,23 @@ if id == 1
     Y = Y0;
     tol1 = Inf;
     tol2 = Inf;
-    state.tt = state.tt - state.dt;
-    state.dt = state.dt / 2;
+    state.dt=state.dt / state.dt_increment; % back off timestep for retry
     return
 end
+dY = cS .* dY;                % unscale the correction
+S = S_unscaled;               % report tol2 on the physical residual
 
 if min(state.Dp) < 0.01
     warning('pipe diameter is too small');
     state.cancelFlag = true;
     Y = Y0;
     tol1 = Inf;
-    tol2 = Inf;
+    tol2 = Inf;    
     return;
 end
 
 Y = Y + dY;
+Y(1, :) = max(Y(1, :), state.P_atm);   % pressure cannot drop below atmospheric
 nz = (Y ~= 0);
 rel = dY.^2;
 rel(nz) = (dY(nz)./Y(nz)).^2;
@@ -81,13 +103,30 @@ switch which
         Zt = Z3;
 end
 
+% Perturbation scales per primary: P [Pa], H [J/kg], FVl [m/s], uv [m/s].
 sc = [max(1e3, 1e-6*abs(Zt(1))); ...
       max(1e3, 1e-6*abs(Zt(2))); ...
-      max(1e-4, 1e-3*abs(Zt(3)))];
+      max(1e-4, 1e-3*abs(Zt(3))); ...
+      max(1e-4, 1e-3*abs(Zt(4)))];
+
+% Phase-aware perturbation direction (Tonkin 2023, Section 4.6): step P and H
+% AWAY from the phase boundary so the finite-difference gradient does not cross
+% saturation (which gives spurious dalpha_g/dH and corrupts the Jacobian at
+% flashing cells). Velocity primaries have no phase boundary -> step forward.
+Sv_t = calculatePhaseProperties(Zt(1), Zt(2), state);
+sgn = ones(k, 1);
+if Sv_t <= 1e-6              % single-phase liquid: raise P, lower H (stay liquid)
+    sgn(1) = +1; sgn(2) = -1;
+elseif Sv_t >= 1 - 1e-6      % single-phase vapour: lower P, raise H (stay vapour)
+    sgn(1) = -1; sgn(2) = +1;
+else                          % two-phase: step toward the interior of the dome
+    sgn(1) = +1;
+    if Sv_t < 0.5, sgn(2) = +1; else, sgn(2) = -1; end
+end
 
 for j = 1:k
     Zp = Zt;
-    h = sc(j);
+    h = sgn(j) * sc(j);
     Zp(j) = Zt(j) + h;
     switch which
         case 1
